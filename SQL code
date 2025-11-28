@@ -1,0 +1,57 @@
+# What is the net revenue (total minus payment fee) for wholesale client, grouped by product line, warehouse, and month (June, July, August)?
+
+SELECT product_line,
+    CASE WHEN EXTRACT('month' from date) = 6 THEN 'June'
+        WHEN EXTRACT('month' from date) = 7 THEN 'July'
+        WHEN EXTRACT('month' from date) = 8 THEN 'August'
+    END as month,
+    warehouse,
+	SUM(total) - SUM(payment_fee) AS net_revenue
+FROM sales
+WHERE client_type = 'Wholesale'
+GROUP BY product_line, warehouse, month
+ORDER BY product_line, month, net_revenue DESC;
+
+#For each warehouse and month, what was the top payment method by net revenue (total minus payment fee)?
+
+WITH monthly_revenue AS (
+    SELECT 
+        warehouse,
+        EXTRACT(MONTH FROM date) AS month,
+        payment,
+        SUM(total - payment_fee) AS net_revenue
+    FROM public.sales
+    GROUP BY warehouse, month, payment
+),
+ranked_methods AS (
+    SELECT *,
+           RANK() OVER (PARTITION BY warehouse, month ORDER BY net_revenue DESC) AS payment_rank
+    FROM monthly_revenue
+)
+SELECT 
+    warehouse,
+    month,
+    payment,
+    net_revenue
+FROM ranked_methods
+WHERE payment_rank = 1
+ORDER BY warehouse, month;
+
+#The marketing team is planning a targeted campaign and wants to know the most popular product lines for retail and wholesale customers.They have given you the task to find the top 3 most ordered product lines for each client type.
+
+WITH Client AS (
+    SELECT 
+        client_type,
+        product_line,
+        COUNT(*) AS product_line_count,
+        RANK() OVER (PARTITION BY client_type ORDER BY COUNT(*) DESC) AS rank
+    FROM public.sales
+    GROUP BY client_type, product_line
+)
+SELECT 
+    client_type,
+    product_line,
+    product_line_count
+FROM Client
+WHERE rank <= 3
+ORDER BY client_type, rank;
